@@ -2,46 +2,48 @@ package com.gms.virtualengine
 
 import android.app.Activity
 import android.app.AlertDialog
-import android.os.Bundle
 import android.content.Intent
+import android.net.Uri
+import android.os.Bundle
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
-import android.view.View
-import android.view.ViewGroup
 import android.widget.*
-import android.text.Editable
-import android.text.TextWatcher
+import org.json.JSONArray
+import org.json.JSONObject
+import java.io.File
 
 class MainActivity : Activity() {
 
     private val bg = Color.rgb(7, 13, 30)
-    private val panel = Color.rgb(17, 29, 57)
-    private val blue = Color.rgb(40, 130, 255)
+    private val panel = Color.rgb(18, 31, 59)
+    private val blue = Color.rgb(39, 126, 255)
     private val cyan = Color.rgb(0, 210, 255)
     private val white = Color.WHITE
-    private val muted = Color.rgb(157, 174, 205)
-
-    private lateinit var appList: LinearLayout
-    private lateinit var countText: TextView
-    private lateinit var searchBox: EditText
-    private var searchQuery = ""
+    private val muted = Color.rgb(160, 177, 207)
 
     private val prefs by lazy {
-        getSharedPreferences("gms_managed_apps", MODE_PRIVATE)
+        getSharedPreferences("gms_plugin_manager", MODE_PRIVATE)
     }
 
-    data class AppInfo(
-        val label: String,
-        val packageName: String
-    )
+    private lateinit var content: LinearLayout
+    private lateinit var statusText: TextView
 
-    private fun dp(v: Int): Int =
+    private var selectedGame = -1
+    private var pendingGame = -1
+
+    private val games = JSONArray()
+
+    private val picker = 1001
+
+    private fun dp(v: Int) =
         (v * resources.displayMetrics.density).toInt()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        loadGames()
 
         window.statusBarColor = bg
         window.navigationBarColor = bg
@@ -49,173 +51,77 @@ class MainActivity : Activity() {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(bg)
-            setPadding(dp(18), dp(16), dp(18), dp(12))
+            setPadding(dp(18), dp(20), dp(18), dp(10))
         }
 
-        val scroll = ScrollView(this).apply {
-            isFillViewport = true
-            clipToPadding = false
-        }
-
-        val content = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-        }
-
-        // TOP BRAND
-        val top = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-        }
-
-        val brand = TextView(this).apply {
+        val header = TextView(this).apply {
             text = "GMS VIRTUAL ENGINE"
-            textSize = 21f
-            setTextColor(white)
+            textSize = 22f
             typeface = Typeface.DEFAULT_BOLD
-            letterSpacing = 0.04f
-        }
-
-        val version = TextView(this).apply {
-            text = "  V1.1"
-            textSize = 10f
-            setTextColor(cyan)
-            setPadding(dp(8), dp(6), dp(8), dp(6))
-            background = shape(panel, 10)
-        }
-
-        top.addView(brand, LinearLayout.LayoutParams(0, -2, 1f))
-        top.addView(version)
-        content.addView(top)
-
-        val welcome = text(
-            "Your apps. Your space. Your control.",
-            13f, muted
-        )
-        welcome.setPadding(0, dp(7), 0, dp(22))
-        content.addView(welcome)
-
-        // HERO CARD
-        val hero = card()
-        hero.orientation = LinearLayout.VERTICAL
-        hero.setPadding(dp(19), dp(19), dp(19), dp(19))
-
-        hero.addView(text("ENGINE OVERVIEW", 11f, muted))
-
-        val status = text("●  APP MANAGER READY", 19f, cyan)
-        status.typeface = Typeface.DEFAULT_BOLD
-        status.setPadding(0, dp(12), 0, dp(7))
-        hero.addView(status)
-
-        hero.addView(text(
-            "Manage and launch your selected apps from one place.",
-            13f, muted
-        ))
-
-        content.addView(hero, marginBottom(20))
-
-        // STATISTICS
-        val stats = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-        }
-
-        val statCard = card()
-        statCard.orientation = LinearLayout.VERTICAL
-        statCard.setPadding(dp(16), dp(15), dp(16), dp(15))
-
-        statCard.addView(text("MANAGED APPS", 10f, muted))
-
-        countText = text("0", 29f, white)
-        countText.typeface = Typeface.DEFAULT_BOLD
-        countText.setPadding(0, dp(6), 0, 0)
-        statCard.addView(countText)
-
-        stats.addView(statCard, LinearLayout.LayoutParams(0, -2, 1f))
-        content.addView(stats, marginBottom(22))
-
-        // SECTION TITLE
-        val section = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-        }
-
-        val sectionTitle = text("MY VIRTUAL SPACE", 16f, white)
-        sectionTitle.typeface = Typeface.DEFAULT_BOLD
-        section.addView(sectionTitle, LinearLayout.LayoutParams(0, -2, 1f))
-
-        section.addView(text("LOCAL", 10f, cyan))
-        content.addView(section, marginBottom(12))
-
-        // SEARCH
-        searchBox = EditText(this).apply {
-            hint = "Search managed apps..."
-            setHintTextColor(muted)
             setTextColor(white)
-            textSize = 14f
-            setSingleLine(true)
-            setPadding(dp(15), dp(12), dp(15), dp(12))
-            background = shape(panel, 14)
         }
+        root.addView(header)
 
-        content.addView(searchBox, marginBottom(14))
+        val subtitle = TextView(this).apply {
+            text = "NATIVE PLUGIN MANAGEMENT SYSTEM"
+            textSize = 10f
+            letterSpacing = 0.12f
+            setTextColor(cyan)
+            setPadding(0, dp(7), 0, dp(18))
+        }
+        root.addView(subtitle)
 
-        appList = LinearLayout(this).apply {
+        statusText = TextView(this).apply {
+            text = "●  PLUGIN MANAGER READY"
+            textSize = 13f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(cyan)
+            setPadding(dp(14), dp(15), dp(14), dp(15))
+            background = shape(panel, 15)
+        }
+        root.addView(statusText)
+
+        val scroll = ScrollView(this)
+        content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
+            setPadding(0, dp(16), 0, dp(20))
         }
-        content.addView(appList, marginBottom(16))
-
-        // ADD APP BUTTON
-        val addButton = button("+   ADD AUTHORIZED APP")
-        addButton.setOnClickListener { showAppPicker() }
-
-        content.addView(addButton, marginBottom(12))
-
-        val note = text(
-            "Apps are saved locally on this device. " +
-            "This manager launches installed apps; " +
-            "it does not clone or isolate them.",
-            11f, muted
-        )
-        note.gravity = Gravity.CENTER
-        note.setPadding(dp(8), dp(12), dp(8), dp(24))
-        content.addView(note)
 
         scroll.addView(content)
-        root.addView(
-            scroll,
-            LinearLayout.LayoutParams(-1, 0, 1f)
-        )
+        root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
 
-        val footer = text(
-            "GMS ENGINE  •  BUILT FOR ANDROID",
-            10f, muted
-        )
-        footer.gravity = Gravity.CENTER
-        footer.setPadding(0, dp(12), 0, dp(5))
+        val footer = TextView(this).apply {
+            text = "GMS ENGINE  •  NATIVE PLUGIN SYSTEM"
+            textSize = 10f
+            gravity = Gravity.CENTER
+            setTextColor(muted)
+            setPadding(0, dp(12), 0, dp(8))
+        }
         root.addView(footer)
 
         setContentView(root)
-
-        searchBox.addTextChangedListener(object : TextWatcher {
-            override fun beforeTextChanged(
-                s: CharSequence?, start: Int, count: Int, after: Int
-            ) {}
-            override fun onTextChanged(
-                s: CharSequence?, start: Int, before: Int, count: Int
-            ) {
-                searchQuery = s?.toString()?.trim() ?: ""
-                refreshApps()
-            }
-            override fun afterTextChanged(s: Editable?) {}
-        })
-
-        refreshApps()
+        showDashboard()
     }
 
-    private fun text(
-        value: String,
-        size: Float,
-        color: Int
-    ): TextView {
+    private fun shape(color: Int, radius: Int): GradientDrawable {
+        return GradientDrawable().apply {
+            setColor(color)
+            cornerRadius = dp(radius).toFloat()
+            setStroke(dp(1), Color.rgb(42, 68, 108))
+        }
+    }
+
+    private fun gradient(): GradientDrawable {
+        return GradientDrawable(
+            GradientDrawable.Orientation.LEFT_RIGHT,
+            intArrayOf(blue, Color.rgb(0, 175, 235))
+        ).apply {
+            cornerRadius = dp(15).toFloat()
+        }
+    }
+
+    private fun label(value: String, size: Float = 14f,
+                      color: Int = white): TextView {
         return TextView(this).apply {
             text = value
             textSize = size
@@ -223,259 +129,311 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun button(value: String, action: () -> Unit): TextView {
+        return TextView(this).apply {
+            text = value
+            textSize = 14f
+            gravity = Gravity.CENTER
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(white)
+            setPadding(dp(12), dp(16), dp(12), dp(16))
+            background = gradient()
+            isClickable = true
+            setOnClickListener {
+                animate().scaleX(0.97f).scaleY(0.97f)
+                    .setDuration(80).withEndAction {
+                        animate().scaleX(1f).scaleY(1f)
+                            .setDuration(100).start()
+                    }.start()
+                action()
+            }
+        }
+    }
+
+    private fun addGap(parent: LinearLayout, height: Int = 12) {
+        parent.addView(
+            android.view.View(this),
+            LinearLayout.LayoutParams(1, dp(height))
+        )
+    }
+
     private fun card(): LinearLayout {
         return LinearLayout(this).apply {
-            setBackgroundGradient(
-                intArrayOf(
-                    Color.rgb(20, 37, 72),
-                    Color.rgb(13, 24, 49)
-                ), 20
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), dp(17), dp(16), dp(17))
+            background = shape(panel, 17)
+        }
+    }
+
+    private fun loadGames() {
+        val raw = prefs.getString("games", "[]") ?: "[]"
+        try {
+            val array = JSONArray(raw)
+            for (i in 0 until array.length()) games.put(array.getJSONObject(i))
+        } catch (_: Exception) {}
+    }
+
+    private fun saveGames() {
+        prefs.edit().putString("games", games.toString()).apply()
+    }
+
+    private fun showDashboard() {
+        content.removeAllViews()
+
+        val title = label("PLUGIN DASHBOARD", 17f)
+        title.typeface = Typeface.DEFAULT_BOLD
+        content.addView(title)
+        addGap(content, 13)
+
+        val overview = card()
+        overview.addView(label("REGISTERED GAME PROFILES", 10f, muted))
+        addGap(overview, 8)
+        overview.addView(label(games.length().toString(), 31f))
+        addGap(overview, 4)
+        overview.addView(label("Stored locally on this device", 11f, muted))
+        content.addView(overview)
+        addGap(content, 16)
+
+        content.addView(button("+   ADD NEW GAME PROFILE") {
+            showAddGame()
+        })
+        addGap(content, 12)
+
+        content.addView(button("▣   NATIVE LIBRARY MANAGER") {
+            showLibraryInfo()
+        })
+        addGap(content, 22)
+
+        val section = label("YOUR GAME PROFILES", 15f)
+        section.typeface = Typeface.DEFAULT_BOLD
+        content.addView(section)
+        addGap(content, 12)
+
+        if (games.length() == 0) {
+            val empty = card()
+            empty.gravity = Gravity.CENTER
+            empty.addView(label("✦", 30f, cyan))
+            addGap(empty, 8)
+            empty.addView(label("No game profiles yet", 15f))
+            addGap(empty, 5)
+            empty.addView(label("Add your first game profile above.", 11f, muted))
+            content.addView(empty)
+        }
+
+        for (i in 0 until games.length()) {
+            val game = games.getJSONObject(i)
+            val item = card()
+
+            val name = label(game.optString("name"), 16f)
+            name.typeface = Typeface.DEFAULT_BOLD
+            item.addView(name)
+            addGap(item, 6)
+            item.addView(label(game.optString("package"), 11f, muted))
+            addGap(item, 10)
+
+            val info = label(
+                "Architecture: ${game.optString("abi", "Not checked")}",
+                11f, cyan
             )
+            item.addView(info)
+            addGap(item, 12)
+
+            item.addView(button("VIEW COMPATIBILITY REPORT") {
+                showReport(i)
+            })
+            addGap(item, 8)
+
+            item.addView(button("REMOVE PROFILE") {
+                AlertDialog.Builder(this)
+                    .setTitle("Remove game profile?")
+                    .setMessage("This removes only the saved profile, not the installed game.")
+                    .setNegativeButton("Cancel", null)
+                    .setPositiveButton("Remove") { _, _ ->
+                        games.remove(i)
+                        saveGames()
+                        showDashboard()
+                    }.show()
+            })
+
+            content.addView(item)
+            addGap(content, 12)
         }
     }
 
-    private fun shape(color: Int, radius: Int): GradientDrawable {
-        return GradientDrawable().apply {
-            setColor(color)
-            cornerRadius = dp(radius).toFloat()
-            setStroke(dp(1), Color.rgb(37, 65, 105))
+    private fun showAddGame() {
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(10), dp(20), 0)
         }
-    }
 
-    private fun button(label: String): TextView {
-        return TextView(this).apply {
-            text = label
-            textSize = 14f
-            typeface = Typeface.DEFAULT_BOLD
-            gravity = Gravity.CENTER
+        val name = EditText(this).apply {
+            hint = "Game / App Name"
             setTextColor(white)
-            setPadding(dp(12), dp(17), dp(12), dp(17))
-            setBackgroundGradient(
-                intArrayOf(
-                    Color.rgb(37, 120, 255),
-                    Color.rgb(0, 174, 235)
-                ), 15
-            )
-            isClickable = true
-            isFocusable = true
-            setOnTouchListener { v, event ->
-                when (event.action) {
-                    android.view.MotionEvent.ACTION_DOWN ->
-                        v.animate().scaleX(0.97f).scaleY(0.97f)
-                            .setDuration(90).start()
-                    android.view.MotionEvent.ACTION_UP,
-                    android.view.MotionEvent.ACTION_CANCEL ->
-                        v.animate().scaleX(1f).scaleY(1f)
-                            .setDuration(110).start()
-                }
-                false
-            }
-        }
-    }
-
-    private fun View.setBackgroundGradient(
-        colors: IntArray,
-        radius: Int
-    ) {
-        background = GradientDrawable(
-            GradientDrawable.Orientation.LEFT_RIGHT,
-            colors
-        ).apply {
-            cornerRadius = dp(radius).toFloat()
-            setStroke(dp(1), Color.rgb(37, 65, 105))
-        }
-    }
-
-    private fun marginBottom(value: Int): LinearLayout.LayoutParams {
-        return LinearLayout.LayoutParams(-1, -2).apply {
-            bottomMargin = dp(value)
-        }
-    }
-
-    private fun installedApps(): List<AppInfo> {
-        val intent = Intent(Intent.ACTION_MAIN).apply {
-            addCategory(Intent.CATEGORY_LAUNCHER)
+            setHintTextColor(muted)
         }
 
-        return packageManager.queryIntentActivities(intent, 0)
-            .mapNotNull {
-                val packageName = it.activityInfo?.packageName ?: return@mapNotNull null
-                if (packageName == packageNameOfSelf()) return@mapNotNull null
-
-                AppInfo(
-                    it.loadLabel(packageManager).toString(),
-                    packageName
-                )
-            }
-            .distinctBy { it.packageName }
-            .sortedBy { it.label.lowercase() }
-    }
-
-    private fun packageNameOfSelf() = packageName
-
-    private fun managedPackages(): MutableSet<String> {
-        return prefs.getStringSet("packages", emptySet())
-            ?.toMutableSet() ?: mutableSetOf()
-    }
-
-    private fun showAppPicker() {
-        val allApps = installedApps()
-        val selected = managedPackages()
-
-        val available = allApps.filter {
-            !selected.contains(it.packageName)
+        val pkg = EditText(this).apply {
+            hint = "Package Name (example: com.example.game)"
+            setTextColor(white)
+            setHintTextColor(muted)
         }
 
-        if (available.isEmpty()) {
-            AlertDialog.Builder(this)
-                .setTitle("No more apps")
-                .setMessage("All available launcher apps are already managed, or no compatible apps were found.")
-                .setPositiveButton("OK", null)
-                .show()
-            return
-        }
-
-        val labels = available.map { it.label }.toTypedArray()
+        box.addView(name)
+        box.addView(pkg)
 
         AlertDialog.Builder(this)
-            .setTitle("Choose an installed app")
-            .setItems(labels) { _, which ->
-                selected.add(available[which].packageName)
-                prefs.edit()
-                    .putStringSet("packages", selected)
-                    .apply()
-                refreshApps()
-            }
+            .setTitle("Create Game Profile")
+            .setView(box)
             .setNegativeButton("Cancel", null)
+            .setPositiveButton("Create") { _, _ ->
+                val n = name.text.toString().trim()
+                val p = pkg.text.toString().trim()
+
+                if (n.isBlank() || !p.matches(
+                    Regex("[A-Za-z][A-Za-z0-9_]*(\\.[A-Za-z0-9_]+)+")
+                )) {
+                    Toast.makeText(
+                        this, "Enter a valid name and package ID",
+                        Toast.LENGTH_LONG
+                    ).show()
+                    return@setPositiveButton
+                }
+
+                val obj = JSONObject()
+                obj.put("name", n)
+                obj.put("package", p)
+                obj.put("abi", "Not checked")
+                obj.put("library", "")
+                games.put(obj)
+                saveGames()
+                showDashboard()
+            }.show()
+    }
+
+    private fun showReport(index: Int) {
+        val game = games.getJSONObject(index)
+        val pkg = game.optString("package")
+        val abi = android.os.Build.SUPPORTED_ABIS.joinToString()
+
+        val installed = try {
+            packageManager.getApplicationInfo(pkg, 0)
+            true
+        } catch (_: Exception) {
+            false
+        }
+
+        val report = """
+            GAME: ${game.optString("name")}
+
+            PACKAGE: $pkg
+
+            DEVICE ABI:
+            $abi
+
+            INSTALLED:
+            ${if (installed) "YES" else "NOT FOUND"}
+
+            NATIVE LIBRARY:
+            ${game.optString("library", "Not imported")}
+
+            REQUIRED CHECKS:
+
+            1. Confirm game package and ownership.
+            2. Match the library ABI with the target app.
+            3. Check Android API compatibility.
+            4. Provide an authorized Plugin API in your own game.
+            5. Implement plugin initialization and error handling.
+            6. Test on a separate test build.
+
+            STATUS:
+            ${if (installed) "Profile found; compatibility needs testing."
+              else "Install the app or verify the package name."}
+
+            NOTE:
+            Importing a LIB does not inject it into another app.
+        """.trimIndent()
+
+        AlertDialog.Builder(this)
+            .setTitle("Compatibility Report")
+            .setMessage(report)
+            .setPositiveButton("Import LIB") { _, _ ->
+                pendingGame = index
+                chooseLibrary()
+            }
+            .setNegativeButton("Close", null)
             .show()
     }
 
-    private fun refreshApps() {
-        if (!::appList.isInitialized) return
-
-        appList.removeAllViews()
-
-        val selected = managedPackages()
-        val all = installedApps().filter {
-            selected.contains(it.packageName) &&
-            it.label.contains(searchQuery, ignoreCase = true)
+    private fun chooseLibrary() {
+        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "*/*"
         }
+        startActivityForResult(intent, picker)
+    }
 
-        countText.text = selected.size.toString()
+    @Deprecated("Use Activity Result API in future update")
+    override fun onActivityResult(
+        requestCode: Int, resultCode: Int, data: Intent?
+    ) {
+        super.onActivityResult(requestCode, resultCode, data)
 
-        if (all.isEmpty()) {
-            val empty = card()
-            empty.orientation = LinearLayout.VERTICAL
-            empty.gravity = Gravity.CENTER
-            empty.setPadding(dp(20), dp(25), dp(20), dp(25))
+        if (requestCode != picker || resultCode != RESULT_OK) return
 
-            empty.addView(text("✦", 30f, cyan))
-            val message = text(
-                if (selected.isEmpty())
-                    "Your space is waiting"
-                else
-                    "No matching apps found",
-                15f, white
-            )
-            message.typeface = Typeface.DEFAULT_BOLD
-            message.gravity = Gravity.CENTER
-            message.setPadding(0, dp(8), 0, dp(5))
-            empty.addView(message)
+        val uri: Uri = data?.data ?: return
+        val filename = uri.lastPathSegment ?: "native-library.so"
 
-            val hint = text(
-                "Tap ADD AUTHORIZED APP to get started.",
-                12f, muted
-            )
-            hint.gravity = Gravity.CENTER
-            empty.addView(hint)
-
-            appList.addView(empty, marginBottom(12))
+        if (!filename.endsWith(".so", true)) {
+            Toast.makeText(this, "Please select a .so library", Toast.LENGTH_LONG).show()
             return
         }
 
-        all.forEach { app ->
-            appList.addView(createAppRow(app), marginBottom(10))
+        try {
+            val dir = File(filesDir, "native_libraries")
+            dir.mkdirs()
+
+            val safeName = "library_${System.currentTimeMillis()}.so"
+            val output = File(dir, safeName)
+
+            contentResolver.openInputStream(uri)?.use { input ->
+                output.outputStream().use { out -> input.copyTo(out) }
+            } ?: throw Exception("Cannot read selected file")
+
+            if (pendingGame in 0 until games.length()) {
+                val game = games.getJSONObject(pendingGame)
+                game.put("library", safeName)
+                game.put("abi", android.os.Build.SUPPORTED_ABIS.firstOrNull() ?: "Unknown")
+                saveGames()
+            }
+
+            Toast.makeText(
+                this,
+                "LIB imported for compatibility review",
+                Toast.LENGTH_LONG
+            ).show()
+
+            showDashboard()
+
+        } catch (e: Exception) {
+            Toast.makeText(
+                this, "Import failed: ${e.message}",
+                Toast.LENGTH_LONG
+            ).show()
         }
     }
 
-    private fun createAppRow(app: AppInfo): View {
-        val row = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(12), dp(12), dp(12), dp(12))
-            background = shape(panel, 16)
-        }
-
-        val icon = ImageView(this).apply {
-            try {
-                setImageDrawable(packageManager.getApplicationIcon(app.packageName))
-            } catch (_: Exception) {
-                setImageResource(android.R.drawable.sym_def_app_icon)
-            }
-        }
-
-        row.addView(icon, LinearLayout.LayoutParams(dp(43), dp(43)))
-
-        val names = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(11), 0, dp(5), 0)
-        }
-
-        val name = text(app.label, 14f, white)
-        name.typeface = Typeface.DEFAULT_BOLD
-        names.addView(name)
-
-        val pkg = text(app.packageName, 9f, muted)
-        pkg.maxLines = 1
-        pkg.maxWidth = dp(145)
-        names.addView(pkg)
-
-        row.addView(names, LinearLayout.LayoutParams(0, -2, 1f))
-
-        val launch = TextView(this).apply {
-            text = "OPEN"
-            textSize = 10f
-            typeface = Typeface.DEFAULT_BOLD
-            gravity = Gravity.CENTER
-            setTextColor(cyan)
-            setPadding(dp(11), dp(10), dp(11), dp(10))
-            background = shape(Color.rgb(12, 45, 80), 10)
-            setOnClickListener {
-                val launchIntent =
-                    packageManager.getLaunchIntentForPackage(app.packageName)
-                if (launchIntent != null) {
-                    try {
-                        startActivity(launchIntent)
-                    } catch (_: Exception) {
-                        Toast.makeText(
-                            this@MainActivity,
-                            "Unable to launch this app",
-                            Toast.LENGTH_SHORT
-                        ).show()
-                    }
-                }
-            }
-        }
-
-        row.addView(launch)
-
-        row.setOnLongClickListener {
-            AlertDialog.Builder(this)
-                .setTitle(app.label)
-                .setMessage("Remove this app from your GMS managed list? The original app will remain installed.")
-                .setNegativeButton("Cancel", null)
-                .setPositiveButton("Remove") { _, _ ->
-                    val packages = managedPackages()
-                    packages.remove(app.packageName)
-                    prefs.edit()
-                        .putStringSet("packages", packages)
-                        .apply()
-                    refreshApps()
-                }
-                .show()
-            true
-        }
-
-        return row
+    private fun showLibraryInfo() {
+        AlertDialog.Builder(this)
+            .setTitle("Native Library Manager")
+            .setMessage(
+                "Import and store your authorized .so files.\n\n" +
+                "The manager records the library filename and checks " +
+                "the device ABI. It does not execute, inject, or load " +
+                "arbitrary libraries into other apps.\n\n" +
+                "For your own game, add a documented Plugin API " +
+                "and link the library in that game's source code."
+            )
+            .setPositiveButton("OK", null)
+            .show()
     }
 }
